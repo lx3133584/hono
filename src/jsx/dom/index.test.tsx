@@ -2862,6 +2862,53 @@ describe('DOM', () => {
       expect(effectCount).toBe(2)
       expect(cleanupCount).toBe(1)
     })
+
+    it('compares dependencies using Object.is for NaN and signed zeros', async () => {
+      let nanEffectCount = 0
+      let zeroEffectCount = 0
+
+      const App = () => {
+        const [count, setCount] = useState(0)
+        const [zero, setZero] = useState<number>(0)
+        const nanVal = Number.NaN
+
+        useEffect(() => {
+          nanEffectCount++
+        }, [nanVal])
+
+        useEffect(() => {
+          zeroEffectCount++
+        }, [zero])
+
+        return (
+          <div>
+            <button data-testid="count-btn" onClick={() => setCount((c) => c + 1)}>
+              {count}
+            </button>
+            <button data-testid="zero-btn" onClick={() => setZero(-0)}>
+              {String(zero)}
+            </button>
+          </div>
+        )
+      }
+
+      render(<App />, root)
+      await new Promise((resolve) => setTimeout(resolve))
+      expect(nanEffectCount).toBe(1)
+      expect(zeroEffectCount).toBe(1)
+
+      // Updating unrelated state does not re-run effect with NaN dependency
+      root.querySelector<HTMLButtonElement>('[data-testid="count-btn"]')?.click()
+      await Promise.resolve()
+      await new Promise((resolve) => setTimeout(resolve))
+      expect(nanEffectCount).toBe(1)
+
+      // Changing 0 to -0 must trigger effect re-run (Object.is(0, -0) is false)
+      root.querySelector<HTMLButtonElement>('[data-testid="zero-btn"]')?.click()
+      await Promise.resolve()
+      await new Promise((resolve) => setTimeout(resolve))
+      expect(zeroEffectCount).toBe(2)
+    })
   })
 
   describe('useLayoutEffect', () => {
