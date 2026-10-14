@@ -270,4 +270,36 @@ describe('Body Limit Middleware', () => {
       expect(handler).not.toHaveBeenCalled()
     })
   })
+
+  describe('custom Request class preservation', () => {
+    class CustomRequest extends Request {}
+
+    it('should use raw request constructor to construct new request', async () => {
+      const app = new Hono()
+      let rawRequestInHandler: unknown
+      app.use('*', bodyLimit({ maxSize: 100 }))
+      app.post('/test', (c) => {
+        rawRequestInHandler = c.req.raw
+        return c.text('ok')
+      })
+
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('hello'))
+          controller.close()
+        },
+      })
+
+      const customReq = new CustomRequest('http://localhost/test', {
+        method: 'POST',
+        headers: { 'Transfer-Encoding': 'chunked' },
+        body: stream,
+        duplex: 'half',
+      })
+
+      const res = await app.fetch(customReq)
+      expect(res.status).toBe(200)
+      expect(rawRequestInHandler).toBeInstanceOf(CustomRequest)
+    })
+  })
 })
